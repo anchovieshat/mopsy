@@ -705,7 +705,7 @@ void parse_op(u32 instruction) {
 	} else if (op_k != InvalidOp && op_t == InvalidType) {
 		printf("[InvType: %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
 	} else {
-		//printf("[Error] 0x%x\n", instruction);
+		printf("[Error] 0x%x\n", instruction);
 	}
 }
 
