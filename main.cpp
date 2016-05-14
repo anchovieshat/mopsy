@@ -3,16 +3,23 @@
 #include <string.h>
 
 #define u8 unsigned char
-#define u16 unsigned short
-#define u32 unsigned int
-#define u64 unsigned long
+#define u16 uint16_t
+#define u32 uint32_t
+#define u64 uint64_t
 #define bool u32
 
 #define BUFFER_SIZE 240
 
-// TODO: Use BSWAP ASM instruction for this!
-u32 swap_bytes(u32 val) {
-	return (val >> 24) | ((val << 8) & 0xFF0000) | ((val >> 8) & 0xFF00) | (val << 24);
+u16 swap_bytes_16(u16 val) {
+	return __builtin_bswap16(val);
+}
+
+u32 swap_bytes_32(u32 val) {
+	return __builtin_bswap32(val);
+}
+
+u64 swap_bytes_64(u64 val) {
+	return __builtin_bswap64(val);
 }
 
 char *swap_string_bytes(char s[]) {
@@ -32,6 +39,7 @@ typedef struct Instruction {
 	u8 rd;
 	u8 sa;
 	u8 funct;
+	u16 code;
 	u16 immediate;
 	u32 target;
 } Instruction;
@@ -91,6 +99,7 @@ typedef enum Opcode {
 	Lwu,
 	Sll,
 	Srl,
+	Srav,
 	Dsll,
 	Dsrl,
 	Sb,
@@ -203,11 +212,11 @@ Opcode op_kind(u8 op) {
 		case 0x16: {
 			return Daddiu;
 		} break;
-		case 0x17: {
-			return Ldl;
-		} break;
 		case 0x18: {
 			return Ldr;
+		} break;
+		case 0x1A: {
+			return Ldl;
 		} break;
 		case 0x20: {
 			return Lb;
@@ -413,6 +422,9 @@ const char *kind_string(Opcode op) {
 		case Sll: {
 			return "Sll";
 		} break;
+		case Srav: {
+			return "Srav";
+		} break;
 		case Dsll: {
 			return "Dsll";
 		} break;
@@ -513,7 +525,7 @@ Type op_type(Opcode op) {
 		op == Mfhi || op == Mflo || op == Mfc0 || op == Mult || op == Multu || op == Nor ||
 		op == Xor || op == Or || op == Slt || op == Sltu || op == Sll || op == Srl ||
 		op == Sub || op == Subu || op == Jalr || op == Dsrlv || op == Dsll || op == Daddu ||
-		op == Dsrl || op == Dsub || op == Mthi) {
+		op == Dsrl || op == Dsub || op == Mthi || op == Mtc0) {
 		return RType;
 	} else if (op == Jump || op == Jal) {
 		return JType;
@@ -522,7 +534,7 @@ Type op_type(Opcode op) {
 			   op == Sltiu || op == Sw || op == Sd || op == Sdl || op == Addi ||
 			   op == Lb || op == Xori || op == Bgtz || op == Andi || op == Swr ||
 			   op == Bnel || op == Bgez || op == Blez || op == Ll || op == Daddiu ||
-			   op == Daddi) {
+			   op == Daddi || op == Ldl || op == Addiu || op == Cache) {
 		return IType;
 	} else if (op == Syscall) {
 		return SType;
@@ -687,6 +699,7 @@ void parse_op(u32 instruction) {
 	inst.rt = (instruction << (6 + 5)) >> 27;
 	inst.rd = (instruction << (6 + (5 * 2))) >> 27;
 	inst.sa = (instruction << (6 + (5 * 3))) >> 27;
+	inst.code = (instruction << (6 + (5 * 2))) >> 22;
 	inst.funct = (instruction << 26) >> 26;
 	inst.immediate = (instruction << 16) >> 16;
 	inst.target = instruction << 6;
@@ -694,24 +707,41 @@ void parse_op(u32 instruction) {
 	Opcode op_k = op_kind(inst.op);
 	op_k = special_lookup(op_k, inst);
 	op_k = control_lookup(op_k, inst);
+	if (op_k == Control) {
+		op_k = InvalidOp;
+	}
 	const char *op_k_string = kind_string(op_k);
 	Type op_t = op_type(op_k);
 	const char *op_t_string = type_string(op_t);
 
-	if (op_k == Special || op_k == Control) {
-		printf("[Inv Spec/Ctrl] 0x%x, funct: %d\n", instruction, inst.funct);
-	} else if (op_k != InvalidOp && op_t != InvalidType) {
-		printf("[ %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
-	} else if (op_k != InvalidOp && op_t == InvalidType) {
-		printf("[InvType: %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
+	if (op_k == Nop) {
+		printf("[ %s ]\n", op_k_string);
+	}  else if (op_t == RType) {
+		printf("[ %s ] %u, %u, %u, (%u) | <0x%x>\n", op_k_string, inst.rs, inst.rt, inst.rd, inst.sa, instruction);
+	} else if (op_t == IType) {
+		printf("[ %s ] %u, %u, %u\n", op_k_string, inst.rs, inst.rd, inst.immediate);
+	} else if (op_t == JType) {
+		printf("[ %s ] 0x%x\n", op_k_string, inst.target);
+	} else if (op_t == TType) {
+		printf("[ %s ] %u, %u, %u\n", op_k_string, inst.rs, inst.rt, inst.code);
 	} else {
-		printf("[Error] 0x%x\n", instruction);
+		if (op_k == Special) {
+			printf("[Inv Spec] 0x%x, funct: %u\n", instruction, inst.funct);
+		} else if (op_k == Control) {
+			printf("[Inv Ctrl] 0x%x, funct: %u\n", instruction, inst.funct);
+		} else if (op_k != InvalidOp && op_t != InvalidType) {
+			printf("[ %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
+		} else if (op_k != InvalidOp && op_t == InvalidType) {
+			printf("[InvType: %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
+		} else {
+			printf("[Error] 0x%x\n", instruction);
+		}
 	}
 }
 
 int main() {
     FILE *asm_file;
-    asm_file = fopen("smario.n64", "rb");
+    asm_file = fopen("raycast.z64", "rb");
 
 	if (!asm_file) {
 		puts("Error opening file!");
@@ -721,7 +751,7 @@ int main() {
 	u8 pi_reg[4];
 	u32 info[5];
 	u64 unknown[1];
-	char name[41];
+	char name[21];
 	u32 unknown2[1];
 	u32 manufacturer[1];
 	u16 more_info[2];
@@ -737,7 +767,7 @@ int main() {
 	fread(pi_reg, sizeof(u8), 4, asm_file);
 	fread(info, sizeof(u32), 5, asm_file);
 	fread(unknown, sizeof(u64), 1, asm_file);
-	fread(name, sizeof(char), 40, asm_file);
+	fread(name, sizeof(char), 20, asm_file);
 	fread(unknown2, sizeof(u32), 1, asm_file);
 	fread(manufacturer, sizeof(u32), 1, asm_file);
 	fread(more_info, sizeof(u16), 2, asm_file);
@@ -756,13 +786,13 @@ int main() {
 		printf("PI_BSB_DOM1_PWD_REG: 0x%x\n", pi_reg[2]);
 		printf("PI_BSB_DOM1_PGS_REG: 0x%x\n", pi_reg[3]);
 
-		printf("Clock Rate: %d\n", info[0]);
-		printf("Program Counter: %d\n", info[1]);
-		printf("Release: %d\n", info[2]);
-		printf("CRC1: %d\n", info[3]);
-		printf("CRC2: %d\n", info[4]);
+		printf("Clock Rate: %u\n", info[0]);
+		printf("Program Counter: %u\n", info[1]);
+		printf("Release: %u\n", info[2]);
+		printf("CRC1: %u\n", info[3]);
+		printf("CRC2: %u\n", info[4]);
 
-		name[40] = '\0';
+		name[20] = '\0';
 		printf("Program Name: %s\n", name);
 
 		printf("Manufacturer: 0x%x\n", manufacturer[0]);
@@ -774,25 +804,25 @@ int main() {
 		printf("PI_BSB_DOM1_PWD_REG: 0x%x\n", pi_reg[3]);
 		printf("PI_BSB_DOM1_PGS_REG: 0x%x\n", pi_reg[2]);
 
-		printf("Clock Rate: %d\n", swap_bytes(info[0]));
-		printf("Program Counter: %d\n", swap_bytes(info[1]));
-		printf("Release: %d\n", swap_bytes(info[2]));
-		printf("CRC1: %d\n", swap_bytes(info[3]));
-		printf("CRC2: %d\n", swap_bytes(info[4]));
+		printf("Clock Rate: %u\n", swap_bytes_32(info[0]));
+		printf("Program Counter: %u\n", swap_bytes_32(info[1]));
+		printf("Release: %u\n", swap_bytes_32(info[2]));
+		printf("CRC1: %u\n", swap_bytes_32(info[3]));
+		printf("CRC2: %u\n", swap_bytes_32(info[4]));
 
 		char *swap_name = swap_string_bytes(name);
-		swap_name[40] = '\0';
+		swap_name[20] = '\0';
 		printf("Program Name: %s\n", swap_name);
 
-		printf("Manufacturer: 0x%x\n", swap_bytes(manufacturer[0]));
-		printf("Cartridge ID: 0x%x\n", swap_bytes(more_info[0]));
-		printf("Country Code: 0x%x\n", swap_bytes(more_info[1]));
+		printf("Manufacturer: 0x%x\n", swap_bytes_32(manufacturer[0]));
+		printf("Cartridge ID: 0x%x\n", swap_bytes_16(more_info[0]));
+		printf("Country Code: 0x%x\n", swap_bytes_16(more_info[1]));
 	}
 
 	if (!big_endian) {
 		puts("swapping bytes");
 		for (u32 i = 0; i < BUFFER_SIZE; i++) {
-			u32 instruction = swap_bytes(program[i]);
+			u32 instruction = swap_bytes_32(program[i]);
 			parse_op(instruction);
 		}
 	} else {
