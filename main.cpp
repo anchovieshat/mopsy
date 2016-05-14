@@ -6,7 +6,7 @@
 #define u32 unsigned int
 #define bool u32
 
-#define BUFFER_SIZE 50
+#define BUFFER_SIZE 500
 
 // TODO: Use BSWAP ASM instruction for this!
 u32 swap_bytes(u32 val) {
@@ -27,11 +27,13 @@ typedef enum Opcode {
 	Addiu,
 	Slti,
 	Sltiu,
+	And,
 	Andi,
+	Or,
 	Ori,
 	Xori,
 	Lui,
-	Eret,
+	Control,
 	Beql,
 	Bnel,
 	Blezl,
@@ -57,6 +59,14 @@ typedef enum Opcode {
 	Sdr,
 	Swr,
 	Ll,
+	Mfc0,
+	Mtc0,
+	Tlbr,
+	Tlbwi,
+	Tlbwr,
+	Tlbp,
+	Eret,
+	Cache,
 	Nop,
 	Unknown,
 } Opcode;
@@ -112,7 +122,7 @@ Opcode op_type(u8 op) {
 			return Lui;
 		} break;
 		case 0x10: {
-			return Eret;
+			return Control;
 		} break;
 		case 0x11: {
 			return Beql;
@@ -183,6 +193,9 @@ Opcode op_type(u8 op) {
 		case 0x2E: {
 			return Swr;
 		} break;
+		case 0x2F: {
+			return Cache;
+		} break;
 		case 0x30: {
 			return Ll;
 		} break;
@@ -234,8 +247,14 @@ const char *type_string(Opcode op) {
 		case Sltiu: {
 			return "Sltiu";
 		} break;
+		case And: {
+			return "And";
+		} break;
 		case Andi: {
 			return "Andi";
+		} break;
+		case Or: {
+			return "Or";
 		} break;
 		case Ori: {
 			return "Ori";
@@ -246,8 +265,8 @@ const char *type_string(Opcode op) {
 		case Lui: {
 			return "Lui";
 		} break;
-		case Eret: {
-			return "Eret";
+		case Control: {
+			return "Control";
 		} break;
 		case Beql: {
 			return "Beql";
@@ -309,11 +328,38 @@ const char *type_string(Opcode op) {
 		case Sdr: {
 			return "Sdr";
 		} break;
+		case Sw: {
+			return "Sw";
+		} break;
 		case Swr: {
 			return "Swr";
 		} break;
 		case Ll: {
 			return "Ll";
+		} break;
+		case Mfc0: {
+			return "Mfc0";
+		} break;
+		case Mtc0: {
+			return "Mtc0";
+		} break;
+		case Tlbr: {
+			return "Tlbr";
+		} break;
+		case Tlbwi: {
+			return "Tlbwi";
+		} break;
+		case Tlbwr: {
+			return "Tlbwr";
+		} break;
+		case Tlbp: {
+			return "Tlbp";
+		} break;
+		case Eret: {
+			return "Eret";
+		} break;
+		case Cache: {
+			return "Cache";
 		} break;
 		case Nop: {
 			return "Nop";
@@ -348,13 +394,50 @@ void parse_op(u32 instruction) {
 			case 32: {
 				op_t = Add;
 			} break;
+			case 36: {
+				op_t = And;
+			} break;
+			case 37: {
+				op_t = Or;
+			} break;
+		}
+	} else if (op_t == Control) {
+		if (funct == 0) {
+			switch (rs) {
+				case 0: {
+					op_t = Mfc0;
+				} break;
+				case 4: {
+					op_t = Mtc0;
+				} break;
+			}
+		} else {
+			switch (funct) {
+				case 1: {
+					op_t = Tlbr;
+				} break;
+				case 2: {
+					op_t = Tlbwi;
+				} break;
+				case 6: {
+					op_t = Tlbwr;
+				} break;
+				case 8: {
+					op_t = Tlbp;
+				} break;
+				case 24: {
+					op_t = Eret;
+				} break;
+			}
 		}
 	}
+
 	const char *op_string = type_string(op_t);
-	if (op_t == Special) {
+	if (op_t == Nop) {
+		printf("read: 0x%x, op_type: %s\n", instruction, op_string);
+	} else if (op_t == Special) {
 		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d, function field: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa, funct);
-	}
-	else if (op_t != Unknown && strncmp(op_string, "Unknown", 7) != 0) {
+	} else if (op_t != Unknown && strncmp(op_string, "Unknown", 7) != 0) {
 		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa);
 	} else {
 		printf("read: %x, op: %x\n", instruction, op);
