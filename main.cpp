@@ -29,17 +29,23 @@ typedef enum Opcode {
 	Special,
 	Bgez,
 	Jump,
+	Jr,
 	Jal,
+	Jalr,
     Beq,
 	Bne,
 	Blez,
 	Bgtz,
 	Add,
+	Sub,
 	Addi,
 	Addiu,
+	Daddu,
 	Dsub,
+	Subu,
 	Slti,
 	Sltiu,
+	Slt,
 	Sltu,
 	And,
 	Andi,
@@ -54,17 +60,21 @@ typedef enum Opcode {
 	Bgtzl,
 	Daddi,
 	Daddiu,
+	Divu,
 	Ldl,
 	Ldr,
 	Lb,
 	Lh,
 	Lwl,
 	Lw,
+	Sd,
 	Lbu,
 	Lhu,
 	Lwr,
 	Lwu,
 	Sll,
+	Dsll,
+	Dsrl,
 	Sb,
 	Sh,
 	Swl,
@@ -72,15 +82,24 @@ typedef enum Opcode {
 	Sdl,
 	Sdr,
 	Swr,
+	Dsrlv,
 	Ll,
 	Mfc0,
 	Mtc0,
+	Mthi,
+	Mflo,
+	Mfhi,
 	Tlbr,
 	Tlbwi,
 	Tlbwr,
 	Tlbp,
 	Eret,
 	Cache,
+	Syscall,
+	Tgeu,
+	Tltu,
+	Teq,
+	Tne,
 	Nop,
 	Unknown,
 } Opcode;
@@ -213,6 +232,9 @@ Opcode op_type(u8 op) {
 		case 0x30: {
 			return Ll;
 		} break;
+		case 0x3F: {
+			return Sd;
+		} break;
 		default: {
         	return Unknown;
 		}
@@ -231,8 +253,14 @@ const char *type_string(Opcode op) {
 		case Jump: {
 			return "Jump";
 		} break;
+		case Jr: {
+			return "Jr";
+		} break;
 		case Jal: {
 			return "Jal";
+		} break;
+		case Jalr: {
+			return "Jalr";
 		} break;
 		case Beq: {
 			return "Beq";
@@ -249,17 +277,29 @@ const char *type_string(Opcode op) {
 		case Add: {
 			return "Add";
 		} break;
+		case Sub: {
+			return "Sub";
+		} break;
 		case Addi: {
 			return "Addi";
 		} break;
 		case Addiu: {
 			return "Addiu";
 		} break;
+		case Daddu: {
+			return "Daddu";
+		} break;
 		case Dsub: {
 			return "Dsub";
 		} break;
+		case Subu: {
+			return "Subu";
+		} break;
 		case Slti: {
 			return "Slti";
+		} break;
+		case Slt: {
+			return "Slt";
 		} break;
 		case Sltu: {
 			return "Sltu";
@@ -306,6 +346,9 @@ const char *type_string(Opcode op) {
 		case Daddiu: {
 			return "Daddiu";
 		} break;
+		case Divu: {
+			return "Divu";
+		} break;
 		case Ldl: {
 			return "Ldl";
 		} break;
@@ -321,6 +364,9 @@ const char *type_string(Opcode op) {
 		case Lw: {
 			return "Lw";
 		} break;
+		case Sd: {
+			return "Sd";
+		} break;
 		case Lwl: {
 			return "Lwl";
 		} break;
@@ -335,6 +381,12 @@ const char *type_string(Opcode op) {
 		} break;
 		case Sll: {
 			return "Sll";
+		} break;
+		case Dsll: {
+			return "Dsll";
+		} break;
+		case Dsrl: {
+			return "Dsrl";
 		} break;
 		case Sb: {
 			return "Sb";
@@ -353,6 +405,9 @@ const char *type_string(Opcode op) {
 		} break;
 		case Swr: {
 			return "Swr";
+		} break;
+		case Dsrlv: {
+			return "Dsrlv";
 		} break;
 		case Ll: {
 			return "Ll";
@@ -380,6 +435,30 @@ const char *type_string(Opcode op) {
 		} break;
 		case Cache: {
 			return "Cache";
+		} break;
+		case Syscall: {
+			return "Syscall";
+		} break;
+		case Tgeu: {
+			return "Tgeu";
+		} break;
+		case Tltu: {
+			return "Tltu";
+		} break;
+		case Teq: {
+			return "Teq";
+		} break;
+		case Tne: {
+			return "Tne";
+		} break;
+		case Mthi: {
+			return "Mthi";
+		} break;
+		case Mfhi: {
+			return "Mfhi";
+		} break;
+		case Mflo: {
+			return "Mflo";
 		} break;
 		case Nop: {
 			return "Nop";
@@ -411,8 +490,38 @@ void parse_op(u32 instruction) {
 					op_t = Sll;
 				}
 			} break;
+			case 8: {
+				op_t = Jr;
+			} break;
+			case 9: {
+				op_t = Jalr;
+			} break;
+			case 12: {
+				op_t = Syscall;
+			} break;
+			case 16: {
+				op_t = Mfhi;
+			} break;
+			case 17: {
+				op_t = Mthi;
+			} break;
+			case 18: {
+				op_t = Mflo;
+			} break;
+			case 22: {
+				op_t = Dsrlv;
+			} break;
+			case 27: {
+				op_t = Divu;
+			} break;
 			case 32: {
 				op_t = Add;
+			} break;
+			case 34: {
+				op_t = Sub;
+			} break;
+			case 35: {
+				op_t = Subu;
 			} break;
 			case 36: {
 				op_t = And;
@@ -421,10 +530,34 @@ void parse_op(u32 instruction) {
 				op_t = Or;
 			} break;
 			case 42: {
-				op_t = Dsub;
+				op_t = Slt;
 			} break;
 			case 43: {
 				op_t = Sltu;
+			} break;
+			case 45: {
+				op_t = Daddu;
+			} break;
+			case 46: {
+				op_t = Dsub;
+			} break;
+			case 49: {
+				op_t = Tgeu;
+			} break;
+			case 51: {
+				op_t = Tltu;
+			} break;
+			case 52: {
+				op_t = Teq;
+			} break;
+			case 54: {
+				op_t = Tne;
+			} break;
+			case 56: {
+				op_t = Dsll;
+			} break;
+			case 58: {
+				op_t = Dsrl;
 			} break;
 		}
 	} else if (op_t == Control) {
@@ -460,11 +593,19 @@ void parse_op(u32 instruction) {
 
 	const char *op_string = type_string(op_t);
 	if (op_t == Nop) {
+#ifdef DEBUG
 		printf("read: 0x%x, op_type: %s\n", instruction, op_string);
+#else
+		printf("%s\n", op_string);
+#endif
 	} else if (op_t == Special) {
 		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d, function field: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa, funct);
 	} else if (op_t != Unknown && strncmp(op_string, "Unknown", 7) != 0) {
+#ifdef DEBUG
 		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa);
+#else
+		printf("%s\n", op_string);
+#endif
 	} else {
 		printf("read: %x, op: %x\n", instruction, op);
 	}
@@ -554,13 +695,11 @@ int main() {
 		puts("swapping bytes");
 		for (u32 i = 0; i < BUFFER_SIZE; i++) {
 			u32 instruction = swap_bytes(program[i]);
-			printf("%d ", i+1);
 			parse_op(instruction);
 		}
 	} else {
 		for (u32 i = 0; i < BUFFER_SIZE; i++) {
 			u32 instruction = program[i];
-			printf("%d ", i+1);
 			parse_op(instruction);
 		}
 	}
