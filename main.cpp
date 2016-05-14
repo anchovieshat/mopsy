@@ -22,6 +22,7 @@ typedef enum Opcode {
 	Bne,
 	Blez,
 	Bgtz,
+	Add,
 	Addi,
 	Addiu,
 	Slti,
@@ -47,6 +48,7 @@ typedef enum Opcode {
 	Lhu,
 	Lwr,
 	Lwu,
+	Sll,
 	Sb,
 	Sh,
 	Swl,
@@ -55,6 +57,7 @@ typedef enum Opcode {
 	Sdr,
 	Swr,
 	Ll,
+	Nop,
 	Unknown,
 } Opcode;
 
@@ -216,6 +219,9 @@ const char *type_string(Opcode op) {
 		case Bgtz: {
 			return "Bgtz";
 		} break;
+		case Add: {
+			return "Add";
+		} break;
 		case Addi: {
 			return "Addi";
 		} break;
@@ -273,6 +279,9 @@ const char *type_string(Opcode op) {
 		case Lh: {
 			return "Lh";
 		} break;
+		case Lw: {
+			return "Lw";
+		} break;
 		case Lwl: {
 			return "Lwl";
 		} break;
@@ -284,6 +293,9 @@ const char *type_string(Opcode op) {
 		} break;
 		case Lwu: {
 			return "Lwu";
+		} break;
+		case Sll: {
+			return "Sll";
 		} break;
 		case Sb: {
 			return "Sb";
@@ -303,11 +315,50 @@ const char *type_string(Opcode op) {
 		case Ll: {
 			return "Ll";
 		} break;
+		case Nop: {
+			return "Nop";
+		} break;
 		default: {
-			return "unknown";
+			return "Unknown";
 		}
 	}
-	return "unknown";
+	return "Unknown";
+}
+
+void parse_op(u32 instruction) {
+	u8 op = instruction >> 26;
+	u8 rs = (instruction << 6) >> 27;
+	u8 rt = (instruction << (6 + 5)) >> 27;
+	u8 rd = (instruction << (6 + (5 * 2))) >> 27;
+	u8 sa = (instruction << (6 + (5 * 3))) >> 27;
+	u8 funct = (instruction << 26) >> 26;
+	u16 immediate = (instruction << 16) >> 16;
+	u32 target = instruction << 6;
+
+	Opcode op_t = op_type(op);
+	if (op_t == Special) {
+		switch (funct) {
+			case 0: {
+				if (!rs && !rt && !rd && !sa) {
+					op_t = Nop;
+				} else {
+					op_t = Sll;
+				}
+			} break;
+			case 32: {
+				op_t = Add;
+			} break;
+		}
+	}
+	const char *op_string = type_string(op_t);
+	if (op_t == Special) {
+		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d, function field: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa, funct);
+	}
+	else if (op_t != Unknown && strncmp(op_string, "Unknown", 7) != 0) {
+		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa);
+	} else {
+		printf("read: %x, op: %x\n", instruction, op);
+	}
 }
 
 int main() {
@@ -324,7 +375,7 @@ int main() {
 
 	fread(buffer, sizeof(u32), BUFFER_SIZE, asm_file);
 
-#if 0
+#if 1
 	puts("byteswapped");
 	for (u32 i = 0; i < BUFFER_SIZE; i++) {
 		u32 instruction = swap_bytes(buffer[i]);
@@ -333,20 +384,7 @@ int main() {
 	for (u32 i = 0; i < BUFFER_SIZE; i++) {
 		u32 instruction = buffer[i];
 #endif
-		u8 op = instruction >> 26;
-		u8 rs = (instruction << 6) >> 27;
-		u8 rt = (instruction << (6 + 5)) >> 27;
-		u8 rd = (instruction << (6 + (5 * 2))) >> 27;
-		u8 sa = (instruction << (6 + (5 * 3))) >> 27;
-		u8 funct = (instruction << 26) >> 26;
-		u16 immediate = (instruction << 16) >> 16;
-		u32 target = instruction << 6;
-		Opcode op_t = op_type(op);
-		if (op_t != Unknown) {
-			printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d, function field: %d\n", instruction, type_string(op_t), rs, rt, immediate, target, rd, sa, funct);
-		} else {
-			printf("read: %x, op: %x\n", instruction, op);
-		}
+		parse_op(instruction);
 	}
 
 	fclose(asm_file);
