@@ -1,16 +1,28 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define u8 unsigned char
 #define u16 unsigned short
 #define u32 unsigned int
+#define u64 unsigned long
 #define bool u32
 
-#define BUFFER_SIZE 500
+#define BUFFER_SIZE 240
 
 // TODO: Use BSWAP ASM instruction for this!
 u32 swap_bytes(u32 val) {
 	return (val >> 24) | ((val << 8) & 0xFF0000) | ((val >> 8) & 0xFF00) | (val << 24);
+}
+
+char *swap_string_bytes(char s[]) {
+	char *ret = (char *)malloc(strlen(s));
+
+	for (u32 i = 0; i < strlen(s); i += 2) {
+    	ret[i] = s[i+1];
+    	ret[i+1] = s[i];
+	}
+	return ret;
 }
 
 typedef enum Opcode {
@@ -25,8 +37,10 @@ typedef enum Opcode {
 	Add,
 	Addi,
 	Addiu,
+	Dsub,
 	Slti,
 	Sltiu,
+	Sltu,
 	And,
 	Andi,
 	Or,
@@ -241,8 +255,14 @@ const char *type_string(Opcode op) {
 		case Addiu: {
 			return "Addiu";
 		} break;
+		case Dsub: {
+			return "Dsub";
+		} break;
 		case Slti: {
 			return "Slti";
+		} break;
+		case Sltu: {
+			return "Sltu";
 		} break;
 		case Sltiu: {
 			return "Sltiu";
@@ -400,6 +420,12 @@ void parse_op(u32 instruction) {
 			case 37: {
 				op_t = Or;
 			} break;
+			case 42: {
+				op_t = Dsub;
+			} break;
+			case 43: {
+				op_t = Sltu;
+			} break;
 		}
 	} else if (op_t == Control) {
 		if (funct == 0) {
@@ -446,28 +472,97 @@ void parse_op(u32 instruction) {
 
 int main() {
     FILE *asm_file;
-    asm_file = fopen("test.bin", "rb");
+    asm_file = fopen("smario.n64", "rb");
 
 	if (!asm_file) {
 		puts("Error opening file!");
 		return 1;
 	}
 
-	u32 buffer[BUFFER_SIZE];
-	memset(buffer, 0, sizeof(buffer));
+	u8 pi_reg[4];
+	u32 info[5];
+	u64 unknown[1];
+	char name[41];
+	u32 unknown2[1];
+	u32 manufacturer[1];
+	u16 more_info[2];
+	u32 program[BUFFER_SIZE];
 
-	fread(buffer, sizeof(u32), BUFFER_SIZE, asm_file);
+	memset(pi_reg, 0, sizeof(pi_reg));
+	memset(info, 0, sizeof(info));
+	memset(name, 0, sizeof(name));
+	memset(manufacturer, 0, sizeof(manufacturer));
+	memset(more_info, 0, sizeof(more_info));
+	memset(program, 0, sizeof(program));
 
-#if 1
-	puts("byteswapped");
-	for (u32 i = 0; i < BUFFER_SIZE; i++) {
-		u32 instruction = swap_bytes(buffer[i]);
-#else
-	puts("not byteswapped");
-	for (u32 i = 0; i < BUFFER_SIZE; i++) {
-		u32 instruction = buffer[i];
-#endif
-		parse_op(instruction);
+	fread(pi_reg, sizeof(u8), 4, asm_file);
+	fread(info, sizeof(u32), 5, asm_file);
+	fread(unknown, sizeof(u64), 1, asm_file);
+	fread(name, sizeof(char), 40, asm_file);
+	fread(unknown2, sizeof(u32), 1, asm_file);
+	fread(manufacturer, sizeof(u32), 1, asm_file);
+	fread(more_info, sizeof(u16), 2, asm_file);
+
+	fread(program, sizeof(u32), BUFFER_SIZE, asm_file);
+
+	//Check endianness; if pi_reg[0], pi_reg[1] is 0x80, 0x37, rom is in big endian, otherwise, swap.
+	u32 big_endian = 0;
+	if (pi_reg[0] < pi_reg[1]) {
+		big_endian = 1;
+	}
+
+	if (!big_endian) {
+		printf("PI_BSB_DOM1_LAT_REG: 0x%x\n", pi_reg[0]);
+		printf("PI_BSB_DOM1_PGS_REG: 0x%x\n", pi_reg[1]);
+		printf("PI_BSB_DOM1_PWD_REG: 0x%x\n", pi_reg[2]);
+		printf("PI_BSB_DOM1_PGS_REG: 0x%x\n", pi_reg[3]);
+
+		printf("Clock Rate: %d\n", info[0]);
+		printf("Program Counter: %d\n", info[1]);
+		printf("Release: %d\n", info[2]);
+		printf("CRC1: %d\n", info[3]);
+		printf("CRC2: %d\n", info[4]);
+
+		name[40] = '\0';
+		printf("Program Name: %s\n", name);
+
+		printf("Manufacturer: 0x%x\n", manufacturer[0]);
+		printf("Cartridge ID: 0x%x\n", more_info[0]);
+		printf("Country Code: 0x%x\n", more_info[1]);
+	} else {
+		printf("PI_BSB_DOM1_LAT_REG: 0x%x\n", pi_reg[1]);
+		printf("PI_BSB_DOM1_PGS_REG: 0x%x\n", pi_reg[0]);
+		printf("PI_BSB_DOM1_PWD_REG: 0x%x\n", pi_reg[3]);
+		printf("PI_BSB_DOM1_PGS_REG: 0x%x\n", pi_reg[2]);
+
+		printf("Clock Rate: %d\n", swap_bytes(info[0]));
+		printf("Program Counter: %d\n", swap_bytes(info[1]));
+		printf("Release: %d\n", swap_bytes(info[2]));
+		printf("CRC1: %d\n", swap_bytes(info[3]));
+		printf("CRC2: %d\n", swap_bytes(info[4]));
+
+		char *swap_name = swap_string_bytes(name);
+		swap_name[40] = '\0';
+		printf("Program Name: %s\n", swap_name);
+
+		printf("Manufacturer: 0x%x\n", swap_bytes(manufacturer[0]));
+		printf("Cartridge ID: 0x%x\n", swap_bytes(more_info[0]));
+		printf("Country Code: 0x%x\n", swap_bytes(more_info[1]));
+	}
+
+	if (!big_endian) {
+		puts("swapping bytes");
+		for (u32 i = 0; i < BUFFER_SIZE; i++) {
+			u32 instruction = swap_bytes(program[i]);
+			printf("%d ", i+1);
+			parse_op(instruction);
+		}
+	} else {
+		for (u32 i = 0; i < BUFFER_SIZE; i++) {
+			u32 instruction = program[i];
+			printf("%d ", i+1);
+			parse_op(instruction);
+		}
 	}
 
 	fclose(asm_file);
