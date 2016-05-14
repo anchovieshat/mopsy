@@ -25,6 +25,17 @@ char *swap_string_bytes(char s[]) {
 	return ret;
 }
 
+typedef struct Instruction {
+	u8 op;
+	u8 rs;
+	u8 rt;
+	u8 rd;
+	u8 sa;
+	u8 funct;
+	u16 immediate;
+	u32 target;
+} Instruction;
+
 typedef enum Opcode {
 	Special,
 	Bgez,
@@ -38,9 +49,13 @@ typedef enum Opcode {
 	Bgtz,
 	Add,
 	Sub,
+	Mult,
+	Div,
+	Addu,
 	Addi,
 	Addiu,
 	Daddu,
+	Multu,
 	Dsub,
 	Subu,
 	Slti,
@@ -51,7 +66,9 @@ typedef enum Opcode {
 	Andi,
 	Or,
 	Ori,
+	Nor,
 	Xori,
+	Xor,
 	Lui,
 	Control,
 	Beql,
@@ -73,6 +90,7 @@ typedef enum Opcode {
 	Lwr,
 	Lwu,
 	Sll,
+	Srl,
 	Dsll,
 	Dsrl,
 	Sb,
@@ -101,10 +119,20 @@ typedef enum Opcode {
 	Teq,
 	Tne,
 	Nop,
-	Unknown,
+	InvalidOp,
 } Opcode;
 
-Opcode op_type(u8 op) {
+typedef enum Type {
+	RType,
+	JType,
+	IType,
+	SType,
+	TType,
+	NopType,
+	InvalidType,
+} Type;
+
+Opcode op_kind(u8 op) {
 	switch (op) {
 		case 0x0: {
 			return Special;
@@ -236,13 +264,13 @@ Opcode op_type(u8 op) {
 			return Sd;
 		} break;
 		default: {
-        	return Unknown;
+        	return InvalidOp;
 		}
 	}
-	return Unknown;
+	return InvalidOp;
 }
 
-const char *type_string(Opcode op) {
+const char *kind_string(Opcode op) {
 	switch (op) {
 		case Special: {
 			return "special";
@@ -361,6 +389,9 @@ const char *type_string(Opcode op) {
 		case Lh: {
 			return "Lh";
 		} break;
+		case Lhu: {
+			return "Lhu";
+		} break;
 		case Lw: {
 			return "Lw";
 		} break;
@@ -464,150 +495,217 @@ const char *type_string(Opcode op) {
 			return "Nop";
 		} break;
 		default: {
-			return "Unknown";
+			return "InvalidOp";
 		}
 	}
-	return "Unknown";
 }
 
-void parse_op(u32 instruction) {
-	u8 op = instruction >> 26;
-	u8 rs = (instruction << 6) >> 27;
-	u8 rt = (instruction << (6 + 5)) >> 27;
-	u8 rd = (instruction << (6 + (5 * 2))) >> 27;
-	u8 sa = (instruction << (6 + (5 * 3))) >> 27;
-	u8 funct = (instruction << 26) >> 26;
-	u16 immediate = (instruction << 16) >> 16;
-	u32 target = instruction << 6;
 
-	Opcode op_t = op_type(op);
-	if (op_t == Special) {
-		switch (funct) {
+Type op_type(Opcode op) {
+	if (op == InvalidOp) {
+    	return InvalidType;
+	}
+    if (op == Nop) {
+		return NopType;
+	}
+
+	if (op == Add || op == Addu || op == And || op == Div || op == Divu || op == Jr ||
+		op == Mfhi || op == Mflo || op == Mfc0 || op == Mult || op == Multu || op == Nor ||
+		op == Xor || op == Or || op == Slt || op == Sltu || op == Sll || op == Srl ||
+		op == Sub || op == Subu || op == Jalr || op == Dsrlv || op == Dsll || op == Daddu ||
+		op == Dsrl || op == Dsub || op == Mthi) {
+		return RType;
+	} else if (op == Jump || op == Jal) {
+		return JType;
+	} else if (op == Beq || op == Bne || op == Lbu || op == Lhu || op == Lui ||
+			   op == Lw || op == Ori || op == Sb || op == Sh || op == Slti ||
+			   op == Sltiu || op == Sw || op == Sd || op == Sdl || op == Addi ||
+			   op == Lb || op == Xori || op == Bgtz || op == Andi || op == Swr ||
+			   op == Bnel || op == Bgez || op == Blez || op == Ll || op == Daddiu ||
+			   op == Daddi) {
+		return IType;
+	} else if (op == Syscall) {
+		return SType;
+	} else if (op == Teq || op == Tltu || op == Tne || op == Tgeu) {
+		return TType;
+	} else {
+		return InvalidType;
+	}
+}
+
+Opcode special_lookup(Opcode op, Instruction inst) {
+	Opcode op_k = op;
+	if (op_k == Special) {
+		switch (inst.funct) {
 			case 0: {
-				if (!rs && !rt && !rd && !sa) {
-					op_t = Nop;
+				if (!inst.rs && !inst.rt && !inst.rd && !inst.sa) {
+					op_k = Nop;
 				} else {
-					op_t = Sll;
+					op_k = Sll;
 				}
 			} break;
 			case 8: {
-				op_t = Jr;
+				op_k = Jr;
 			} break;
 			case 9: {
-				op_t = Jalr;
+				op_k = Jalr;
 			} break;
 			case 12: {
-				op_t = Syscall;
+				op_k = Syscall;
 			} break;
 			case 16: {
-				op_t = Mfhi;
+				op_k = Mfhi;
 			} break;
 			case 17: {
-				op_t = Mthi;
+				op_k = Mthi;
 			} break;
 			case 18: {
-				op_t = Mflo;
+				op_k = Mflo;
 			} break;
 			case 22: {
-				op_t = Dsrlv;
+				op_k = Dsrlv;
 			} break;
 			case 27: {
-				op_t = Divu;
+				op_k = Divu;
 			} break;
 			case 32: {
-				op_t = Add;
+				op_k = Add;
 			} break;
 			case 34: {
-				op_t = Sub;
+				op_k = Sub;
 			} break;
 			case 35: {
-				op_t = Subu;
+				op_k = Subu;
 			} break;
 			case 36: {
-				op_t = And;
+				op_k = And;
 			} break;
 			case 37: {
-				op_t = Or;
+				op_k = Or;
 			} break;
 			case 42: {
-				op_t = Slt;
+				op_k = Slt;
 			} break;
 			case 43: {
-				op_t = Sltu;
+				op_k = Sltu;
 			} break;
 			case 45: {
-				op_t = Daddu;
+				op_k = Daddu;
 			} break;
 			case 46: {
-				op_t = Dsub;
+				op_k = Dsub;
 			} break;
 			case 49: {
-				op_t = Tgeu;
+				op_k = Tgeu;
 			} break;
 			case 51: {
-				op_t = Tltu;
+				op_k = Tltu;
 			} break;
 			case 52: {
-				op_t = Teq;
+				op_k = Teq;
 			} break;
 			case 54: {
-				op_t = Tne;
+				op_k = Tne;
 			} break;
 			case 56: {
-				op_t = Dsll;
+				op_k = Dsll;
 			} break;
 			case 58: {
-				op_t = Dsrl;
+				op_k = Dsrl;
 			} break;
 		}
-	} else if (op_t == Control) {
-		if (funct == 0) {
-			switch (rs) {
+	}
+	return op_k;
+}
+
+Opcode control_lookup(Opcode op, Instruction inst) {
+	Opcode op_k = op;
+
+	if (op_k == Control) {
+		if (inst.funct == 0) {
+			switch (inst.rs) {
 				case 0: {
-					op_t = Mfc0;
+					op_k = Mfc0;
 				} break;
 				case 4: {
-					op_t = Mtc0;
+					op_k = Mtc0;
 				} break;
 			}
 		} else {
-			switch (funct) {
+			switch (inst.funct) {
 				case 1: {
-					op_t = Tlbr;
+					op_k = Tlbr;
 				} break;
 				case 2: {
-					op_t = Tlbwi;
+					op_k = Tlbwi;
 				} break;
 				case 6: {
-					op_t = Tlbwr;
+					op_k = Tlbwr;
 				} break;
 				case 8: {
-					op_t = Tlbp;
+					op_k = Tlbp;
 				} break;
 				case 24: {
-					op_t = Eret;
+					op_k = Eret;
 				} break;
 			}
 		}
 	}
+	return op_k;
+}
 
-	const char *op_string = type_string(op_t);
-	if (op_t == Nop) {
-#ifdef DEBUG
-		printf("read: 0x%x, op_type: %s\n", instruction, op_string);
-#else
-		printf("%s\n", op_string);
-#endif
-	} else if (op_t == Special) {
-		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d, function field: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa, funct);
-	} else if (op_t != Unknown && strncmp(op_string, "Unknown", 7) != 0) {
-#ifdef DEBUG
-		printf("read: 0x%x, op_type: %s, source reg: %d, target reg: %d, immediate: 0x%x, target: 0x%x, dest reg: %d, shift amount: %d\n", instruction, op_string, rs, rt, immediate, target, rd, sa);
-#else
-		printf("%s\n", op_string);
-#endif
+const char *type_string(Type t) {
+	switch (t) {
+		case RType: {
+			return "RType";
+		} break;
+		case JType: {
+			return "JType";
+		} break;
+		case IType: {
+			return "IType";
+		} break;
+		case SType: {
+			return "SType";
+		} break;
+		case TType: {
+			return "TType";
+		} break;
+		case NopType: {
+			return "NopType";
+		} break;
+		default: {
+			return "Invalid Type";
+		}
+	}
+}
+
+void parse_op(u32 instruction) {
+	Instruction inst;
+	inst.op = instruction >> 26;
+	inst.rs = (instruction << 6) >> 27;
+	inst.rt = (instruction << (6 + 5)) >> 27;
+	inst.rd = (instruction << (6 + (5 * 2))) >> 27;
+	inst.sa = (instruction << (6 + (5 * 3))) >> 27;
+	inst.funct = (instruction << 26) >> 26;
+	inst.immediate = (instruction << 16) >> 16;
+	inst.target = instruction << 6;
+
+	Opcode op_k = op_kind(inst.op);
+	op_k = special_lookup(op_k, inst);
+	op_k = control_lookup(op_k, inst);
+	const char *op_k_string = kind_string(op_k);
+	Type op_t = op_type(op_k);
+	const char *op_t_string = type_string(op_t);
+
+	if (op_k == Special || op_k == Control) {
+		printf("[Inv Spec/Ctrl] 0x%x, funct: %d\n", instruction, inst.funct);
+	} else if (op_k != InvalidOp && op_t != InvalidType) {
+		printf("[ %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
+	} else if (op_k != InvalidOp && op_t == InvalidType) {
+		printf("[InvType: %s ] %s 0x%x\n", op_k_string, op_t_string, instruction);
 	} else {
-		printf("read: %x, op: %x\n", instruction, op);
+		//printf("[Error] 0x%x\n", instruction);
 	}
 }
 
