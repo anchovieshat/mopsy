@@ -8,7 +8,7 @@
 #define u64 uint64_t
 #define bool u32
 
-#define BUFFER_SIZE 500
+#define BUFFER_SIZE 650
 
 u16 swap_bytes_16(u16 val) {
 	return __builtin_bswap16(val);
@@ -63,6 +63,7 @@ typedef enum Opcode {
 	Addu,
 	Addi,
 	Addiu,
+	Dadd,
 	Daddu,
 	Multu,
 	Dmultu,
@@ -106,9 +107,13 @@ typedef enum Opcode {
 	Lwr,
 	Lwu,
 	Sll,
+	Sllv,
 	Srl,
+	Srlv,
 	Srav,
 	Dsll,
+	Dsllv,
+	Dsll32,
 	Dsrl,
 	Dsra32,
 	Sb,
@@ -132,8 +137,10 @@ typedef enum Opcode {
 	Eret,
 	Cache,
 	Syscall,
+	Break,
 	Tge,
 	Tgeu,
+	Tlt,
 	Tltu,
 	Teq,
 	Tne,
@@ -208,14 +215,14 @@ Opcode op_kind(u8 op) {
 		case 0x11: {
 			return Beql;
 		} break;
-		case 0x12: {
-			return Bnel;
-		} break;
 		case 0x13: {
 			return Blezl;
 		} break;
 		case 0x14: {
 			return Bgtzl;
+		} break;
+		case 0x15: {
+			return Bnel;
 		} break;
 		case 0x18: {
 			return Daddi;
@@ -352,11 +359,17 @@ const char *kind_string(Opcode op) {
 		case Div: {
 			return "Div";
 		} break;
+		case Addu: {
+			return "Addu";
+		} break;
 		case Addi: {
 			return "Addi";
 		} break;
 		case Addiu: {
 			return "Addiu";
+		} break;
+		case Dadd: {
+			return "Dadd";
 		} break;
 		case Daddu: {
 			return "Daddu";
@@ -385,6 +398,9 @@ const char *kind_string(Opcode op) {
 		case Sltiu: {
 			return "Sltiu";
 		} break;
+		case Sc: {
+			return "Sc";
+		} break;
 		case Scd: {
 			return "Scd";
 		} break;
@@ -408,6 +424,9 @@ const char *kind_string(Opcode op) {
 		} break;
 		case Ori: {
 			return "Ori";
+		} break;
+		case Xor: {
+			return "Xor";
 		} break;
 		case Xori: {
 			return "Xori";
@@ -478,14 +497,26 @@ const char *kind_string(Opcode op) {
 		case Sll: {
 			return "Sll";
 		} break;
+		case Sllv: {
+			return "Sllv";
+		} break;
 		case Srl: {
 			return "Srl";
+		} break;
+		case Srlv: {
+			return "Srlv";
 		} break;
 		case Srav: {
 			return "Srav";
 		} break;
 		case Dsll: {
 			return "Dsll";
+		} break;
+		case Dsllv: {
+			return "Dsllv";
+		} break;
+		case Dsll32: {
+			return "Dsll32";
 		} break;
 		case Dsrl: {
 			return "Dsrl";
@@ -547,11 +578,17 @@ const char *kind_string(Opcode op) {
 		case Syscall: {
 			return "Syscall";
 		} break;
+		case Break: {
+			return "Break";
+		} break;
 		case Tge: {
 			return "Tgeu";
 		} break;
 		case Tgeu: {
 			return "Tgeu";
+		} break;
+		case Tlt: {
+			return "Tlt";
 		} break;
 		case Tltu: {
 			return "Tltu";
@@ -593,7 +630,8 @@ Type op_type(Opcode op) {
 		op == Mfhi || op == Mflo || op == Mfc0 || op == Mult || op == Multu || op == Nor ||
 		op == Xor || op == Or || op == Slt || op == Sltu || op == Sll || op == Srl ||
 		op == Sub || op == Subu || op == Jalr || op == Dsrlv || op == Dsll || op == Daddu ||
-		op == Dsrl || op == Dsub || op == Mthi || op == Mtc0 || op == Dsra32) {
+		op == Dsrl || op == Dsub || op == Mthi || op == Mtc0 || op == Dsra32 || op == Dsll32 ||
+		op == Dadd || op == Dsllv || op == Sllv || op == Srlv) {
 		return RType;
 	} else if (op == Jump || op == Jal) {
 		return JType;
@@ -605,11 +643,11 @@ Type op_type(Opcode op) {
 			   op == Daddi || op == Ldl || op == Addiu || op == Cache || op == Sdr ||
 			   op == Lwl || op == Ldr || op == Bgtzl || op == Dmultu || op == Sdc1 ||
 			   op == Swl || op == Scd || op == Ldc1 || op == Lld || op == Sc ||
-			   op == Lwc1) {
+			   op == Lwc1 || op == Lwu || op == Lh) {
 		return IType;
-	} else if (op == Syscall) {
+	} else if (op == Syscall || op == Break) {
 		return SType;
-	} else if (op == Teq || op == Tltu || op == Tne || op == Tgeu || op == Tge) {
+	} else if (op == Teq || op == Tltu || op == Tne || op == Tgeu || op == Tge || op == Tlt) {
 		return TType;
 	} else if (op == Eret) {
 		return CType;
@@ -632,6 +670,12 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			case 2: {
 				op_k = Srl;
 			} break;
+			case 4: {
+				op_k = Sllv;
+			} break;
+			case 6: {
+				op_k = Srlv;
+			} break;
 			case 8: {
 				op_k = Jr;
 			} break;
@@ -640,6 +684,9 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			} break;
 			case 12: {
 				op_k = Syscall;
+			} break;
+			case 13: {
+				op_k = Break;
 			} break;
 			case 16: {
 				op_k = Mfhi;
@@ -650,11 +697,17 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			case 18: {
 				op_k = Mflo;
 			} break;
+			case 20: {
+				op_k = Dsllv;
+			} break;
 			case 22: {
 				op_k = Dsrlv;
 			} break;
 			case 24: {
 				op_k = Mult;
+			} break;
+			case 25: {
+				op_k = Multu;
 			} break;
 			case 27: {
 				op_k = Divu;
@@ -664,6 +717,9 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			} break;
 			case 32: {
 				op_k = Add;
+			} break;
+			case 33: {
+				op_k = Addu;
 			} break;
 			case 34: {
 				op_k = Sub;
@@ -677,11 +733,17 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			case 37: {
 				op_k = Or;
 			} break;
+			case 38: {
+				op_k = Xor;
+			} break;
 			case 42: {
 				op_k = Slt;
 			} break;
 			case 43: {
 				op_k = Sltu;
+			} break;
+			case 44: {
+				op_k = Dadd;
 			} break;
 			case 45: {
 				op_k = Daddu;
@@ -694,6 +756,9 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			} break;
 			case 49: {
 				op_k = Tgeu;
+			} break;
+			case 50: {
+				op_k = Tlt;
 			} break;
 			case 51: {
 				op_k = Tltu;
@@ -709,6 +774,9 @@ Opcode special_lookup(Opcode op, Instruction inst) {
 			} break;
 			case 58: {
 				op_k = Dsrl;
+			} break;
+			case 60: {
+				op_k = Dsll32;
 			} break;
 			case 63: {
 				op_k = Dsra32;
@@ -810,6 +878,7 @@ void parse_op(u32 instruction) {
 			printf("[ %s ]\n", op_k_string);
 		}  else if (op_t == RType) {
 			printf("[ %s ] R%u<<%u, R%u, R%u\n", op_k_string, inst.rs, inst.sa, inst.rt, inst.rd);
+	 //   	printf("0x%x\n", instruction);
 		} else if (op_t == IType) {
 			printf("[ %s ] R%u, R%u, %u\n", op_k_string, inst.rs, inst.rd, inst.immediate);
 		} else if (op_t == JType) {
@@ -826,13 +895,14 @@ void parse_op(u32 instruction) {
 
 int main() {
     FILE *asm_file;
-    asm_file = fopen("smario.n64", "rb");
+    asm_file = fopen("pifdata.bin", "rb");
 
 	if (!asm_file) {
 		puts("Error opening file!");
 		return 1;
 	}
 
+/*
 	u8 pi_reg[4];
 	u32 info[5];
 	u64 unknown[1];
@@ -840,15 +910,19 @@ int main() {
 	u32 unknown2[1];
 	u32 manufacturer[1];
 	u16 more_info[2];
+*/
 	u32 program[BUFFER_SIZE];
 
+/*
 	memset(pi_reg, 0, sizeof(pi_reg));
 	memset(info, 0, sizeof(info));
 	memset(name, 0, sizeof(name));
 	memset(manufacturer, 0, sizeof(manufacturer));
 	memset(more_info, 0, sizeof(more_info));
+*/
 	memset(program, 0, sizeof(program));
 
+/*
 	fread(pi_reg, sizeof(u8), 4, asm_file);
 	fread(info, sizeof(u32), 5, asm_file);
 	fread(unknown, sizeof(u64), 1, asm_file);
@@ -856,9 +930,11 @@ int main() {
 	fread(unknown2, sizeof(u32), 1, asm_file);
 	fread(manufacturer, sizeof(u32), 1, asm_file);
 	fread(more_info, sizeof(u16), 2, asm_file);
-
+*/
 	fread(program, sizeof(u32), BUFFER_SIZE, asm_file);
 
+	u32 big_endian = 1;
+/*
 	//Check endianness; if pi_reg[0], pi_reg[1] is 0x80, 0x37, rom is in big endian, otherwise, swap.
 	u32 big_endian = 0;
 	if (pi_reg[0] < pi_reg[1]) {
@@ -903,7 +979,7 @@ int main() {
 		printf("Cartridge ID: 0x%x\n", swap_bytes_16(more_info[0]));
 		printf("Country Code: %c\n", swap_bytes_16(more_info[1]));
 	}
-
+*/
 	if (!big_endian) {
 		for (u32 i = 0; i < BUFFER_SIZE; i++) {
 			u32 instruction = program[i];
