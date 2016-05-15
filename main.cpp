@@ -954,7 +954,7 @@ int main() {
 	}
 
 	puts("==========================");
-	puts("|      Parsing ROM       |");
+	puts("|  Parsing ROM Header    |");
 	puts("==========================");
 
 	if (!big_endian) {
@@ -995,6 +995,10 @@ int main() {
 		printf("Cartridge ID: 0x%x\n", swap_bytes_16(more_info[0]));
 		printf("Country Code: %c\n", swap_bytes_16(more_info[1]));
 	}
+
+	puts("==========================");
+	puts("|      Parsing ROM       |");
+	puts("==========================");
 	if (!big_endian) {
 		for (u32 i = 0; i < BUFFER_SIZE; i++) {
 			u32 instruction = program[i];
