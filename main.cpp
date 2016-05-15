@@ -895,14 +895,33 @@ void parse_op(u32 instruction) {
 
 int main() {
     FILE *asm_file;
-    asm_file = fopen("pifdata.bin", "rb");
+	FILE *bios_file;
+    bios_file = fopen("pifdata.bin", "rb");
+    asm_file = fopen("smario.n64", "rb");
 
-	if (!asm_file) {
-		puts("Error opening file!");
+	if (!bios_file) {
+		puts("Error opening PIF!");
 		return 1;
 	}
 
-/*
+	if (!asm_file) {
+		puts("Error opening ROM!");
+		return 1;
+	}
+
+    u32 bios[BUFFER_SIZE];
+	memset(bios, 0, sizeof(bios));
+	fread(bios, sizeof(u32), BUFFER_SIZE, bios_file);
+
+	puts("==========================");
+	puts("|      Parsing PIF       |");
+	puts("==========================");
+
+	for (u32 i = 0; i < BUFFER_SIZE; i++) {
+		u32 instruction = swap_bytes_32(bios[i]);
+		parse_op(instruction);
+	}
+
 	u8 pi_reg[4];
 	u32 info[5];
 	u64 unknown[1];
@@ -910,19 +929,15 @@ int main() {
 	u32 unknown2[1];
 	u32 manufacturer[1];
 	u16 more_info[2];
-*/
 	u32 program[BUFFER_SIZE];
 
-/*
 	memset(pi_reg, 0, sizeof(pi_reg));
 	memset(info, 0, sizeof(info));
 	memset(name, 0, sizeof(name));
 	memset(manufacturer, 0, sizeof(manufacturer));
 	memset(more_info, 0, sizeof(more_info));
-*/
 	memset(program, 0, sizeof(program));
 
-/*
 	fread(pi_reg, sizeof(u8), 4, asm_file);
 	fread(info, sizeof(u32), 5, asm_file);
 	fread(unknown, sizeof(u64), 1, asm_file);
@@ -930,16 +945,17 @@ int main() {
 	fread(unknown2, sizeof(u32), 1, asm_file);
 	fread(manufacturer, sizeof(u32), 1, asm_file);
 	fread(more_info, sizeof(u16), 2, asm_file);
-*/
 	fread(program, sizeof(u32), BUFFER_SIZE, asm_file);
 
-	u32 big_endian = 1;
-/*
 	//Check endianness; if pi_reg[0], pi_reg[1] is 0x80, 0x37, rom is in big endian, otherwise, swap.
 	u32 big_endian = 0;
 	if (pi_reg[0] < pi_reg[1]) {
 		big_endian = 1;
 	}
+
+	puts("==========================");
+	puts("|      Parsing ROM       |");
+	puts("==========================");
 
 	if (!big_endian) {
 		printf("PI_BSB_DOM1_LAT_REG: 0x%x\n", pi_reg[0]);
@@ -979,7 +995,6 @@ int main() {
 		printf("Cartridge ID: 0x%x\n", swap_bytes_16(more_info[0]));
 		printf("Country Code: %c\n", swap_bytes_16(more_info[1]));
 	}
-*/
 	if (!big_endian) {
 		for (u32 i = 0; i < BUFFER_SIZE; i++) {
 			u32 instruction = program[i];
@@ -994,5 +1009,6 @@ int main() {
 	}
 
 	fclose(asm_file);
+	fclose(bios_file);
     return 0;
 }
