@@ -1,75 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mopsy.h"
 
-#define BUFFER_SIZE 650
+//Currently cannot use more than one parser at a time
+#include "z80.h"
 
-u16 swap_bytes_16(u16 val) {
-	return __builtin_bswap16(val);
-}
+#define BUFFER_SIZE 50
 
-u32 swap_bytes_32(u32 val) {
-	return __builtin_bswap32(val);
-}
 
-u64 swap_bytes_64(u64 val) {
-	return __builtin_bswap64(val);
-}
-
-char *swap_string_bytes(char s[]) {
-	char *ret = (char *)malloc(strlen(s));
-
-	for (u32 i = 0; i < strlen(s); i += 2) {
-    	ret[i] = s[i+1];
-    	ret[i+1] = s[i];
-	}
-	return ret;
-}
-
-void parse_op(u32 instruction) {
-	Instruction inst;
-	inst.op = instruction >> 26;
-	inst.rs = (instruction << 6) >> 27;
-	inst.rt = (instruction << (6 + 5)) >> 27;
-	inst.rd = (instruction << (6 + (5 * 2))) >> 27;
-	inst.sa = (instruction << (6 + (5 * 3))) >> 27;
-	inst.code = (instruction << (6 + (5 * 2))) >> 22;
-	inst.funct = (instruction << 26) >> 26;
-	inst.immediate = (instruction << 16) >> 16;
-	inst.call_offset = (instruction << 6) >> 12;
-	inst.target = instruction << 6;
-
-	Opcode op_k = op_kind(inst.op);
-	op_k = special_lookup(op_k, inst);
-	op_k = control_lookup(op_k, inst);
-	const char *op_k_string = kind_string(op_k);
-	Type op_t = op_type(op_k);
-	//const char *op_t_string = type_string(op_t);
-
-	if (op_k == InvalidOp || op_t == InvalidType || op_k == Special || op_k == Control) {
-		printf("[ Error ] 0x%x\n", instruction);
-	} else {
-		if (op_k == Nop) {
-			printf("[ %s ]\n", op_k_string);
-		}  else if (op_t == RType) {
-			printf("[ %s ] R%u<<%u, R%u, R%u\n", op_k_string, inst.rs, inst.sa, inst.rt, inst.rd);
-	 //   	printf("0x%x\n", instruction);
-		} else if (op_t == IType) {
-			printf("[ %s ] R%u, R%u, %u\n", op_k_string, inst.rs, inst.rd, inst.immediate);
-		} else if (op_t == JType) {
-			printf("[ %s ] 0x%x\n", op_k_string, inst.target);
-		} else if (op_t == TType) {
-			printf("[ %s ] R%u, R%u, %u\n", op_k_string, inst.rs, inst.rt, inst.code);
-		} else if (op_t == SType) {
-			printf("[ %s ] 0x%x\n", op_k_string, inst.call_offset);
-		} else if (op_t == CType) {
-			printf("[ %s ]\n", op_k_string);
-		}
-	}
-}
-
-int load_and_parse_pif(const char *filename) {
+//   Jazzy-N64 Specific Code
+int load_and_parse_n64_pif(const char *filename) {
 	FILE *bios_file;
 	bios_file = fopen(filename, "rb");
 
@@ -86,16 +26,16 @@ int load_and_parse_pif(const char *filename) {
 	puts("|      Parsing PIF       |");
 	puts("==========================");
 
-	for (u32 i = 0; i < BUFFER_SIZE; i++) {
-		u32 instruction = swap_bytes_32(bios[i]);
-		parse_op(instruction);
+	for (u32 i = 0; i < BUFFER_SIZE;) {
+		i = parse_op(bios, i, true);
 	}
 
 	fclose(bios_file);
 	return 0;
 }
 
-int load_and_parse_rom(const char *filename) {
+//   Jazzy-N64 Specific Code
+int load_and_parse_n64_rom(const char *filename) {
 	FILE *rom_file;
 	rom_file = fopen(filename, "rb");
 
@@ -179,27 +119,46 @@ int load_and_parse_rom(const char *filename) {
 	}
 
 	puts("==========================");
-	puts("|      Parsing ROM       |");
+	puts("|   Parsing N64 ROM      |");
 	puts("==========================");
-	if (!big_endian) {
-		for (u32 i = 0; i < BUFFER_SIZE; i++) {
-			u32 instruction = program[i];
-			parse_op(instruction);
-		}
-	} else {
-		puts("swapping bytes");
-		for (u32 i = 0; i < BUFFER_SIZE; i++) {
-			u32 instruction = swap_bytes_32(program[i]);
-			parse_op(instruction);
-		}
+	// if big_endian == true, swap bytes
+	for (u32 i = 0; i < BUFFER_SIZE;) {
+		i = parse_op(program, i, big_endian);
 	}
 
 	fclose(rom_file);
 	return 0;
 }
 
+int load_and_parse_gb_boot(const char *filename) {
+	FILE *rom_file;
+	rom_file = fopen(filename, "rb");
+
+	if (!rom_file) {
+		puts("Error opening ROM!");
+		return 1;
+	}
+
+    u8 rom[BUFFER_SIZE];
+	memset(rom, 0, sizeof(rom));
+	fread(rom, sizeof(u8), BUFFER_SIZE, rom_file);
+
+	puts("==========================");
+	puts("|   Parsing GB ROM       |");
+	puts("==========================");
+
+	for (u32 i = 0; i < BUFFER_SIZE;) {
+		i = parse_op(rom, i, false);
+	}
+
+	fclose(rom_file);
+	return 1;
+}
+
 int main() {
-	load_and_parse_pif("pifdata.bin");
-	load_and_parse_rom("smario.n64");
-    return 0;
+	load_and_parse_gb_boot("gb/gb_boot.bin");
+	//load_and_parse_n64_pif("n64/pifdata.bin");
+	//load_and_parse_n64_rom("n64/smario.n64");
+
+	return 0;
 }

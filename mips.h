@@ -1,13 +1,8 @@
-#ifndef MOPSY_H
-#define MOPSY_H
+#ifndef MIPS_H
+#define MIPS_H
 
-#include <stdlib.h>
-
-#define u8  uint8_t
-#define u16 uint16_t
-#define u32 uint32_t
-#define u64 uint64_t
-#define bool u32
+#include <stdio.h>
+#include "platform.h"
 
 typedef struct Instruction {
 	u8 op;
@@ -825,6 +820,54 @@ Opcode control_lookup(Opcode op, Instruction inst) {
 		}
 	}
 	return op_k;
+}
+
+u32 parse_op(void *rom, u32 idx, bool swapped) {
+	u32 *local_rom = (u32 *)rom;
+	Instruction inst;
+	u32 instruction = local_rom[idx];
+	if (swapped) {
+ 		instruction = swap_bytes_32(instruction);
+	}
+
+	inst.op = instruction >> 26;
+	inst.rs = (instruction << 6) >> 27;
+	inst.rt = (instruction << (6 + 5)) >> 27;
+	inst.rd = (instruction << (6 + (5 * 2))) >> 27;
+	inst.sa = (instruction << (6 + (5 * 3))) >> 27;
+	inst.code = (instruction << (6 + (5 * 2))) >> 22;
+	inst.funct = (instruction << 26) >> 26;
+	inst.immediate = (instruction << 16) >> 16;
+	inst.call_offset = (instruction << 6) >> 12;
+	inst.target = instruction << 6;
+
+	Opcode op_k = op_kind(inst.op);
+	op_k = special_lookup(op_k, inst);
+	op_k = control_lookup(op_k, inst);
+	const char *op_k_string = kind_string(op_k);
+	Type op_t = op_type(op_k);
+	//const char *op_t_string = type_string(op_t);
+
+	if (op_k == InvalidOp || op_t == InvalidType || op_k == Special || op_k == Control) {
+		printf("[ Error ] 0x%x\n", instruction);
+	} else {
+		if (op_k == Nop) {
+			printf("[ %s ]\n", op_k_string);
+		}  else if (op_t == RType) {
+			printf("[ %s ] R%u<<%u, R%u, R%u\n", op_k_string, inst.rs, inst.sa, inst.rt, inst.rd);
+		} else if (op_t == IType) {
+			printf("[ %s ] R%u, R%u, %u\n", op_k_string, inst.rs, inst.rd, inst.immediate);
+		} else if (op_t == JType) {
+			printf("[ %s ] 0x%x\n", op_k_string, inst.target);
+		} else if (op_t == TType) {
+			printf("[ %s ] R%u, R%u, %u\n", op_k_string, inst.rs, inst.rt, inst.code);
+		} else if (op_t == SType) {
+			printf("[ %s ] 0x%x\n", op_k_string, inst.call_offset);
+		} else if (op_t == CType) {
+			printf("[ %s ]\n", op_k_string);
+		}
+	}
+	return ++idx;
 }
 
 #endif

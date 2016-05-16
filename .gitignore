@@ -1,6 +1,5 @@
 .DS_Store
-*.z64
-*.n64
-*.bin
+n64
+gb
 *.out
 *.swp
