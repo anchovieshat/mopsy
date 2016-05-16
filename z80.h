@@ -228,6 +228,7 @@ const char *kind_string(Opcode op) {
 	}
 }
 
+// swapped is unused in the z80, exists for function compatibility with mips
 u32 parse_op(void *rom, u32 idx, bool swapped) {
 	u8 *local_rom = (u8 *)rom;
 	u8 op = local_rom[idx];
@@ -322,10 +323,12 @@ u32 parse_op(void *rom, u32 idx, bool swapped) {
 		sprintf(val2_string, "0x%x", val);
 	}
 
+	// Set instruction to the current op if nothing was set
 	if (inst == 0) {
 		inst = op;
 	}
 
+	// Pretty print only values that exist
 	if (val1 != None && val2 != None) {
 		printf("[ %s ] %s, %s | 0x%x\n", op_k_string, val1_string, val2_string, inst);
 	} else if (val1 != None && val2 == None) {

@@ -826,6 +826,7 @@ u32 parse_op(void *rom, u32 idx, bool swapped) {
 	u32 *local_rom = (u32 *)rom;
 	Instruction inst;
 	u32 instruction = local_rom[idx];
+
 	if (swapped) {
  		instruction = swap_bytes_32(instruction);
 	}
@@ -841,13 +842,16 @@ u32 parse_op(void *rom, u32 idx, bool swapped) {
 	inst.call_offset = (instruction << 6) >> 12;
 	inst.target = instruction << 6;
 
+	// build op kind string, doing lookup for MIPS odd cases
 	Opcode op_k = op_kind(inst.op);
 	op_k = special_lookup(op_k, inst);
 	op_k = control_lookup(op_k, inst);
 	const char *op_k_string = kind_string(op_k);
+
 	Type op_t = op_type(op_k);
 	//const char *op_t_string = type_string(op_t);
 
+	// Pretty print, should catch unfinished instructions and toss an error on that line
 	if (op_k == InvalidOp || op_t == InvalidType || op_k == Special || op_k == Control) {
 		printf("[ Error ] 0x%x\n", instruction);
 	} else {

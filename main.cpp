@@ -121,6 +121,7 @@ int load_and_parse_n64_rom(const char *filename) {
 	puts("==========================");
 	puts("|   Parsing N64 ROM      |");
 	puts("==========================");
+
 	// if big_endian == true, swap bytes
 	for (u32 i = 0; i < BUFFER_SIZE;) {
 		i = parse_op(program, i, big_endian);
@@ -130,6 +131,7 @@ int load_and_parse_n64_rom(const char *filename) {
 	return 0;
 }
 
+// Handmade Gameboy Emulator Specific Code
 int load_and_parse_gb_boot(const char *filename) {
 	FILE *rom_file;
 	rom_file = fopen(filename, "rb");
