@@ -5,7 +5,7 @@
 //Currently cannot use more than one parser at a time
 #include "z80.h"
 
-#define BUFFER_SIZE 50
+#define BUFFER_SIZE 300
 
 
 //   Jazzy-N64 Specific Code
